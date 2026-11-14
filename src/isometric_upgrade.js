@@ -4090,6 +4090,31 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
     };
   }
 
+const origFocusWorldBoss = proto.focusWorldBoss;
+  if (typeof origFocusWorldBoss === 'function') {
+    proto.focusWorldBoss = function () {
+if (Array.isArray(this.worldBosses)) {
+for (const b of this.worldBosses) {
+if (b && b.y > 3100) {
+b.y = 2280 + ((b.id || 0) % 3) * 140;
+}
+}
+}
+this.duelCamActive = false;
+if (this.cam) {
+this.cam.followSelected = false;
+if (this.cam.targetZoom < 0.75) {
+this.cam.targetZoom = 1.15;
+}
+}
+const followBtn = typeof document !== 'undefined' ? document.getElementById('btn-follow-toggle') : null;
+if (followBtn) {
+followBtn.textContent = '🎯 Follow: OFF';
+}
+return origFocusWorldBoss.call(this);
+};
+  }
+
   const origResolvePhysics = proto.resolveUnitPhysics;
   if (typeof origResolvePhysics === 'function') {
     proto.resolveUnitPhysics = function (u, dt, isEnemy) {
