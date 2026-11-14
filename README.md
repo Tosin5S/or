@@ -1,7 +1,7 @@
-# Prehistoric Tribes: Planetary Empire & The One Ring
+# One Ring
 Play live: https://pt.101-s.net/
 
-![Prehistoric Tribes Gameplay Screenshot](assets/screenshot.png)
+![One Ring](assets/screenshot.png)
 
 ## The Story
 At the dawn of the Cradle of Aethelgard, **t101s** rose bearing **The One Ring**—the most powerful artifact on a vast living world of **71% oceans** and **29% continents, forests, deserts, savannas, mountains, and frozen tundra**.
