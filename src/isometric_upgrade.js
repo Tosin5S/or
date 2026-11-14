@@ -4107,11 +4107,24 @@ if (this.cam.targetZoom < 0.75) {
 this.cam.targetZoom = 1.15;
 }
 }
-const followBtn = typeof document !== 'undefined' ? document.getElementById('btn-follow-toggle') : null;
-if (followBtn) {
-followBtn.textContent = '🎯 Follow: OFF';
+const result = origFocusWorldBoss.call(this);
+if (typeof this.updateZoomHUD === 'function') {
+  this.updateZoomHUD();
+} else if (typeof document !== 'undefined') {
+  const followEl = document.getElementById('followCamBtnText');
+  if (followEl) followEl.textContent = `Follow: ${this.cam && this.cam.followSelected ? 'ON' : 'OFF'}`;
+  const zoomEl = document.getElementById('zoomPresetBtnText');
+  if (zoomEl && this.cam) {
+    const pct = Math.round(this.cam.targetZoom * 100);
+    const tag = pct <= 50 ? 'Map' : pct >= 210 ? 'Micro' : pct >= 145 ? 'Duel' : 'RTS';
+    zoomEl.textContent = `${pct}% ${tag}`;
+  }
+  const slider = document.getElementById('zoomRangeSlider');
+  if (slider && this.cam && !this.globeMode) {
+    slider.value = Math.round(this.cam.targetZoom * 100);
+  }
 }
-return origFocusWorldBoss.call(this);
+return result;
 };
   }
 
