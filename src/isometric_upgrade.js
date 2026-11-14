@@ -70,6 +70,8 @@ const UNIT_STATES = {
   swim: { frames: 6, fps: 10 },       // Freestyle front-crawl swimming + flutter kick
   water_surf: { frames: 6, fps: 12 }, // Waterbender hydro-wave surfing stance
   earth_stomp: { frames: 6, fps: 11 }, // Hung-Gar Stomp -> Boulder Lift -> Palm Thrust
+  air_levitate: { frames: 6, fps: 9 },
+  air_flight: { frames: 6, fps: 12 },
 };
 
 const DIRECTIONS = ['SE', 'SW', 'NE', 'NW'];
@@ -91,7 +93,13 @@ function mapUnitStateToAnim(unit) {
   if (unit.bender === 'earth' && ((unit.swingAnim || 0) > 0.05 || unit.state === 'attack' || unit.state === 'fight')) {
     return 'earth_stomp';
   }
-
+  if (unit.bender === 'air' || (unit.skySoar && !unit.mountType)) {
+    const spd = Math.hypot(unit.vx || 0, unit.vy || 0);
+return spd > 8 || (unit.swingAnim || 0) > 0.05 || unit.state === 'attack' || unit.state === 'fight' || unit.state === 'move'
+  ? 'air_flight'
+  : 'air_levitate';
+  }
+  
   if (unit.bender && ((unit.swingAnim || 0) > 0.05 || unit.state === 'attack' || unit.state === 'fight')) {
     return ((Math.floor((unit.animTime || 0) * 1.8) + (unit.id || 0)) % 2 === 0) ? 'bend_cast' : 'attack';
   }
@@ -511,8 +519,69 @@ function renderEarthStompFrame(ctx, cx, groundY, opts) {
   ctx.fill();
   ctx.stroke();
 }
+function renderAirLevitateFrame(ctx, cx, groundY, opts) {
+  const { frameIndex, frameCount, dir, palette } = opts;
+  const t = frameIndex / frameCount, tau = Math.PI * 2;
+  const facingRight = dir === 'SE' || dir === 'NE', facingBack = dir === 'NE' || dir === 'NW', s = facingRight ? 1 : -1;
+  const bob = Math.sin(t * tau) * 2.4;
+  ctx.save();
+  for (let r = 0; r < 3; r++) {
+    const ry = groundY - 3 - r * 3.2 + bob * 0.4, rx = 7 + r * 3.5 + Math.sin(t * tau + r) * 1.2;
+    ctx.strokeStyle = r === 2 ? 'rgba(186, 230, 253, 0.85)' : 'rgba(226, 232, 240, 0.55)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.ellipse(cx, ry, rx, rx * 0.38, 0, 0, tau); ctx.stroke();
+  }
+  ctx.restore();
+  const hipY = groundY - 12 + bob, shoulderY = hipY - 10.5, headY = shoulderY - 6.2;
+  drawArticulatedLimb(ctx, cx - 2.5 * s, hipY, cx - 7.5 * s, hipY + 2.5, cx + 1.5 * s, hipY + 3.2, 3.8, '#3b2f26', '#5c4a3c');
+  drawArticulatedLimb(ctx, cx + 2.5 * s, hipY, cx + 7.5 * s, hipY + 2.5, cx - 1.5 * s, hipY + 3.2, 3.8, '#4a3b30', '#6d5848');
+  ctx.save();
+  ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 2.6;
+  ctx.beginPath(); ctx.moveTo(cx - 5 * s, shoulderY + 1);
+  ctx.quadraticCurveTo(cx - 13 * s, shoulderY - 3 + Math.sin(t * tau) * 3, cx - 16 * s, shoulderY + 4); ctx.stroke();
+  ctx.fillStyle = palette.tunic; ctx.strokeStyle = '#1e1b18'; ctx.lineWidth = 1.0;
+  ctx.beginPath(); ctx.moveTo(cx - 5.4, shoulderY); ctx.lineTo(cx + 5.4, shoulderY); ctx.lineTo(cx + 6.4, hipY + 2); ctx.lineTo(cx - 6.4, hipY + 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#e4b796'; ctx.beginPath(); ctx.arc(cx, headY, 5.3, 0, tau); ctx.fill(); ctx.stroke();
+  if (!facingBack) {
+    ctx.fillStyle = '#38bdf8';
+    ctx.beginPath(); ctx.moveTo(cx + 0.8 * s, headY - 4.2); ctx.lineTo(cx + 2.6 * s, headY - 1.5); ctx.lineTo(cx - 0.8 * s, headY - 1.5); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+  drawLimb(ctx, cx - 4.5 * s, shoulderY + 2, cx + 2.5 * s, shoulderY + 6.5, 3.5, palette.tunicDark, '#fbbf24');
+  drawLimb(ctx, cx + 4.5 * s, shoulderY + 2, cx + 4.5 * s, shoulderY + 6.5, 3.5, palette.tunic, '#fde047');
+  ctx.save(); ctx.strokeStyle = 'rgba(125, 211, 252, 0.92)'; ctx.fillStyle = 'rgba(224, 242, 254, 0.65)'; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.arc(cx + 3.8 * s, shoulderY + 5.2, 3.2, 0, tau); ctx.fill(); ctx.stroke(); ctx.restore();
+}
+function renderAirFlightFrame(ctx, cx, groundY, opts) {
+  const { frameIndex, frameCount, dir, palette } = opts;
+  const t = frameIndex / frameCount, tau = Math.PI * 2;
+  const facingRight = dir === 'SE' || dir === 'NE', facingBack = dir === 'NE' || dir === 'NW', s = facingRight ? 1 : -1;
+  const bankWave = Math.sin(t * tau) * 2.0, leanX = 4.2 * s, scooterY = groundY - 6 + bankWave * 0.5;
+  ctx.save();
+  ctx.fillStyle = 'rgba(56, 189, 248, 0.45)'; ctx.strokeStyle = 'rgba(224, 242, 254, 0.9)'; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.arc(cx, scooterY, 8.5, 0, tau); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  const hipY = groundY - 11 + bankWave, shoulderY = hipY - 10.5, headY = shoulderY - 6.0;
+  drawArticulatedLimb(ctx, cx - 2 * s, hipY, cx - 7 * s, hipY + 3, cx - 12 * s, groundY - 4 + bankWave, 3.8, '#3b2f26', '#5c4a3c');
+  drawArticulatedLimb(ctx, cx + 2 * s, hipY, cx + 4 * s, hipY + 2, cx + 1 * s, groundY - 5 + bankWave, 3.8, '#4a3b30', '#6d5848');
+  drawLimb(ctx, cx - 3.5 * s + leanX * 0.6, shoulderY + 2, cx - 12 * s, shoulderY + 5, 3.5, palette.tunicDark, '#fbbf24');
+  ctx.save();
+  ctx.fillStyle = palette.tunic; ctx.strokeStyle = '#1e1b18'; ctx.lineWidth = 1.0;
+  ctx.beginPath(); ctx.moveTo(cx - 5 + leanX * 0.8, shoulderY); ctx.lineTo(cx + 5.5 + leanX * 0.8, shoulderY); ctx.lineTo(cx + 5.8 + leanX * 0.2, hipY + 2); ctx.lineTo(cx - 5.8 + leanX * 0.2, hipY + 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+  const headX = cx + leanX;
+  ctx.fillStyle = '#e4b796'; ctx.beginPath(); ctx.arc(headX, headY, 5.2, 0, tau); ctx.fill(); ctx.stroke();
+  if (!facingBack) {
+    ctx.fillStyle = '#38bdf8';
+    ctx.beginPath(); ctx.moveTo(headX + 1.0 * s, headY - 4.2); ctx.lineTo(headX + 2.8 * s, headY - 1.4); ctx.lineTo(headX - 0.6 * s, headY - 1.4); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+  const frontHandX = cx + 13.5 * s, frontHandY = shoulderY + 1 + bankWave * 0.4;
+  drawLimb(ctx, cx + 4 * s + leanX * 0.7, shoulderY + 2, frontHandX, frontHandY, 3.6, palette.tunic, '#fde047');
+}
 
 function renderVillagerFrame(ctx, cx, groundY, opts) {
+  if (opts.state === 'air_levitate') return renderAirLevitateFrame(ctx, cx, groundY, opts);
+  if (opts.state === 'air_flight') return renderAirFlightFrame(ctx, cx, groundY, opts);
   if (opts.state === 'earth_stomp') {
     renderEarthStompFrame(ctx, cx, groundY, opts);
     return;
@@ -1318,22 +1387,34 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
         }
       }
     } else if (bender === 'air') {
-      ctx.strokeStyle = 'rgba(226, 232, 240, 0.78)';
-      ctx.lineWidth = 2;
-      for (let r = 0; r < 2; r++) {
-        const startA = phase * 1.6 + r * Math.PI;
-        ctx.beginPath();
-        ctx.ellipse(0, (-6 - r * 8) * scale, (14 + r * 4) * scale, 5 * scale, 0, startA, startA + 2.1);
-        ctx.stroke();
+      const airSpeed = Math.hypot(unit.vx || 0, unit.vy || 0);
+      const isGliding = airSpeed > 8 || Boolean(unit.subElement) || Boolean(unit.skySoar);
+      for (let r = 0; r < 4; r++) {
+        const ringY = (10 - r * 6.5) * scale, ringRX = (6 + r * 4.5 + Math.sin(gameTime * 7 + r) * 1.5) * scale;
+        const startA = (phase * 2.2 + r * 1.35) % (Math.PI * 2);
+        ctx.strokeStyle = r >= 2 ? 'rgba(125, 211, 252, 0.82)' : 'rgba(226, 232, 240, 0.65)';
+        ctx.lineWidth = (1.5 + r * 0.25) * scale;
+        ctx.beginPath(); ctx.ellipse(0, ringY, ringRX, ringRX * 0.42, 0, startA, startA + 4.2); ctx.stroke();
       }
-      if (isActivelyBending) {
+      if (isGliding && unit.mountType !== 'drake') {
+        const bank = Math.sin(gameTime * 6 + (unit.id || 0)) * 3.5;
+        ctx.save(); ctx.translate(0, (-24 + bank * 0.3) * scale);
+        ctx.strokeStyle = '#78350f'; ctx.lineWidth = 2.4 * scale;
+        ctx.beginPath(); ctx.moveTo(-22 * f * scale, 2 * scale); ctx.lineTo(18 * f * scale, -2 * scale); ctx.stroke();
+        for (const side of [-1, 1]) {
+          ctx.fillStyle = 'rgba(220, 38, 38, 0.86)'; ctx.strokeStyle = '#fde047'; ctx.lineWidth = 1.1;
+          ctx.beginPath(); ctx.moveTo(4 * f * scale, 0);
+          ctx.quadraticCurveTo(side * 16 * scale, (-16 + bank * side * 0.4) * scale, (-16 * f + side * 18) * scale, (-6 + bank * 0.5) * scale);
+          ctx.lineTo(-10 * f * scale, 2 * scale); ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+      }
+      if (isActivelyBending || airSpeed > 12) {
         const gustDist = (16 + ((gameTime * 55) % 24)) * f * scale;
-        ctx.strokeStyle = 'rgba(241, 245, 249, 0.85)';
-        ctx.lineWidth = 2.4;
-        ctx.beginPath();
-        ctx.arc(gustDist, -16 * scale, 11 * scale, f > 0 ? -0.9 : Math.PI - 0.9, f > 0 ? 0.9 : Math.PI + 0.9);
-        ctx.stroke();
+        ctx.strokeStyle = 'rgba(186, 230, 253, 0.92)'; ctx.lineWidth = 2.5 * scale;
+        ctx.beginPath(); ctx.arc(gustDist, -16 * scale, 11 * scale, f > 0 ? -0.9 : Math.PI - 0.9, f > 0 ? 0.9 : Math.PI + 0.9); ctx.stroke();
       }
+      
     } else if (bender === 'avatar') {
       const ringColors = ['#f97316', '#38bdf8', '#a3e635', '#f8fafc'];
       for (let r = 0; r < 4; r++) {
@@ -1895,7 +1976,7 @@ export class VillagerSpriteBank {
     const physZ = Math.max(0, unit.z || 0);
     const hoverOffset =
       -physZ +
-      (unit.skySoar || unit.isWraith || unit.mountType === 'drake'
+      (unit.skySoar || unit.isWraith || unit.mountType === 'drake' || unit.bender === 'air'
         ? -18 + Math.sin(gameTime * 4 + (unit.id || 0)) * 4
         : (unit.kataTimer || 0) > 0
         ? -Math.abs(Math.sin(gameTime * 10)) * 16
@@ -2204,7 +2285,19 @@ export class SovereignPhysicsEngine {
         }
       }
     }
-
+    if (!game._airbendersSeeded && Array.isArray(game.villagers) && game.villagers.length > 3) {
+      game._airbendersSeeded = true;
+      let airCount = 0;
+      for (const v of game.villagers) {
+        if (v && !v.isT101s && airCount < 3 && (!v.bender || v.bender === 'air')) {
+          v.bender = 'air';
+          v.subElement = 'flight';
+          v.skySoar = airCount === 0;
+          airCount++;
+        }
+      }
+    }
+    
     if (this.camShakeIntensity > 0.1) {
       this.camShakeIntensity *= Math.exp(-clampedDt * 12);
       const angle = Math.random() * Math.PI * 2;
