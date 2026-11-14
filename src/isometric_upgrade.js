@@ -72,6 +72,8 @@ const UNIT_STATES = {
   earth_stomp: { frames: 6, fps: 11 }, // Hung-Gar Stomp -> Boulder Lift -> Palm Thrust
   air_levitate: { frames: 6, fps: 9 },
   air_flight: { frames: 6, fps: 12 },
+  fire_kata: { frames: 6, fps: 12 },
+  fire_jet: { frames: 6, fps: 13 },
 };
 
 const DIRECTIONS = ['SE', 'SW', 'NE', 'NW'];
@@ -98,6 +100,15 @@ function mapUnitStateToAnim(unit) {
 return spd > 8 || (unit.swingAnim || 0) > 0.05 || unit.state === 'attack' || unit.state === 'fight' || unit.state === 'move'
   ? 'air_flight'
   : 'air_levitate';
+  }
+  if (unit.bender === 'fire') {
+    const spd = Math.hypot(unit.vx || 0, unit.vy || 0);
+    if ((unit.swingAnim || 0) > 0.05 || (unit.kataTimer || 0) > 0 || unit.state === 'attack' || unit.state === 'fight') {
+      return 'fire_kata';
+    }
+    if (spd > 8 && (unit.subElement || unit.skySoar)) {
+      return 'fire_jet';
+    }
   }
   
   if (unit.bender && ((unit.swingAnim || 0) > 0.05 || unit.state === 'attack' || unit.state === 'fight')) {
@@ -578,8 +589,76 @@ function renderAirFlightFrame(ctx, cx, groundY, opts) {
   const frontHandX = cx + 13.5 * s, frontHandY = shoulderY + 1 + bankWave * 0.4;
   drawLimb(ctx, cx + 4 * s + leanX * 0.7, shoulderY + 2, frontHandX, frontHandY, 3.6, palette.tunic, '#fde047');
 }
+function renderFireKataFrame(ctx, cx, groundY, opts) {
+  const { frameIndex, dir } = opts;
+  const facingRight = dir === 'SE' || dir === 'NE', facingBack = dir === 'NE' || dir === 'NW', s = facingRight ? 1 : -1;
+  const isBlazeKick = frameIndex === 2 || frameIndex === 3, isLightningPoint = frameIndex >= 4;
+  const bobY = isBlazeKick ? -4.5 : isLightningPoint ? 2.2 : 1.8, leanX = (isBlazeKick ? -2.4 : isLightningPoint ? 2.8 : 3.6) * s;
+  ctx.save();
+  ctx.fillStyle = 'rgba(10, 14, 18, 0.36)'; ctx.beginPath(); ctx.ellipse(cx + 1.5, groundY, 11.5, 4.8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = isLightningPoint ? 'rgba(56, 189, 248, 0.85)' : 'rgba(249, 115, 22, 0.82)'; ctx.lineWidth = 1.8;
+  ctx.beginPath(); ctx.ellipse(cx + 2 * s, groundY, 12.5, 5.2, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+  const hipY = groundY - 9 + bobY, shoulderY = hipY - 11, headY = shoulderY - 6.5;
+  const rightKneeX = isBlazeKick ? cx + 7.2 * s : cx + 5.8 * s, rightKneeY = isBlazeKick ? groundY - 15.5 : groundY - 5.5;
+  const rightFootX = isBlazeKick ? cx + 14.5 * s : cx + 7.2 * s, rightFootY = isBlazeKick ? groundY - 19.5 : groundY - 1.0;
+  drawArticulatedLimb(ctx, cx - 2.6 * s, hipY, cx - 4.8 * s, groundY - 5.5, cx - 5.8 * s, groundY - 1.2, 4.0, '#450a0a', '#7f1d1d');
+  drawArticulatedLimb(ctx, cx + 2.6 * s, hipY, rightKneeX, rightKneeY, rightFootX, rightFootY, 4.0, '#7f1d1d', '#b91c1c');
+  if (isBlazeKick) {
+    ctx.save(); ctx.strokeStyle = '#f97316'; ctx.lineWidth = 4.2;
+    ctx.beginPath(); ctx.arc(cx + 2 * s, hipY - 3, 14.5, facingRight ? -1.05 : Math.PI + 0.1, facingRight ? 0.05 : Math.PI + 1.05); ctx.stroke();
+    ctx.strokeStyle = '#fef08a'; ctx.lineWidth = 1.8; ctx.stroke(); ctx.restore();
+  }
+  drawLimb(ctx, cx - 4 * s + leanX * 0.6, shoulderY + 2, isLightningPoint ? cx - 8 * s : cx + 9.5 * s, isLightningPoint ? shoulderY - 4 : shoulderY + 1.5, 3.6, '#450a0a', '#dc2626');
+  ctx.save();
+  ctx.fillStyle = '#991b1b'; ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 1.1;
+  ctx.beginPath(); ctx.moveTo(cx - 5.8 + leanX * 0.8, shoulderY); ctx.lineTo(cx + 5.8 + leanX * 0.8, shoulderY); ctx.lineTo(cx + 6.8 + leanX * 0.2, hipY + 2); ctx.lineTo(cx - 6.8 + leanX * 0.2, hipY + 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+  const headX = cx + leanX;
+  ctx.fillStyle = '#e4b796'; ctx.beginPath(); ctx.arc(headX, headY, 5.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.moveTo(headX - 2, headY - 6); ctx.lineTo(headX, headY - 10); ctx.lineTo(headX + 2, headY - 6); ctx.closePath(); ctx.fill();
+  if (!facingBack) { ctx.fillStyle = '#1f1916'; ctx.fillRect(headX + 1.2 * s, headY - 0.4, 1.3, 1.3); }
+  ctx.restore();
+  const frontHandX = cx + 14.5 * s, frontHandY = shoulderY + 0.5;
+  drawLimb(ctx, cx + 4.2 * s + leanX * 0.7, shoulderY + 2, frontHandX, frontHandY, 3.8, '#b91c1c', '#fbbf24');
+  ctx.save();
+  if (isLightningPoint) {
+    ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2.0;
+    ctx.beginPath(); ctx.moveTo(frontHandX, frontHandY); ctx.lineTo(frontHandX + 5 * s, frontHandY - 3); ctx.lineTo(frontHandX + 9 * s, frontHandY + 2); ctx.lineTo(frontHandX + 14 * s, frontHandY - 2); ctx.stroke();
+    ctx.fillStyle = '#e0f2fe'; ctx.beginPath(); ctx.arc(frontHandX + 1 * s, frontHandY, 2.8, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.fillStyle = '#f97316'; ctx.beginPath(); ctx.arc(frontHandX + 2 * s, frontHandY, 4.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fef08a'; ctx.beginPath(); ctx.arc(frontHandX + 1.5 * s, frontHandY, 2.4, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function renderFireJetFrame(ctx, cx, groundY, opts) {
+  const { frameIndex, frameCount, dir } = opts;
+  const t = frameIndex / frameCount, tau = Math.PI * 2;
+  const facingRight = dir === 'SE' || dir === 'NE', s = facingRight ? 1 : -1;
+  const jetPulse = Math.sin(t * tau * 2) * 2.2, leanX = 4.6 * s;
+  const hipY = groundY - 12 + jetPulse * 0.4, shoulderY = hipY - 10.5, headY = shoulderY - 6.0;
+  ctx.save();
+  for (const footOffY of [0, 3]) {
+    const fx = cx - 8 * s, fy = groundY - 5 + footOffY;
+    ctx.fillStyle = 'rgba(249, 115, 22, 0.88)';
+    ctx.beginPath(); ctx.moveTo(fx, fy - 2.5); ctx.lineTo(fx - (13 + jetPulse) * s, fy + 2); ctx.lineTo(fx, fy + 2.5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fef08a'; ctx.beginPath(); ctx.arc(fx - 2 * s, fy, 2.4, 0, tau); ctx.fill();
+  }
+  ctx.restore();
+  drawArticulatedLimb(ctx, cx - 2 * s, hipY, cx - 5 * s, hipY + 3, cx - 8 * s, groundY - 5, 3.8, '#450a0a', '#7f1d1d');
+  drawArticulatedLimb(ctx, cx + 2 * s, hipY, cx - 3 * s, hipY + 4, cx - 7 * s, groundY - 2, 3.8, '#7f1d1d', '#b91c1c');
+  drawLimb(ctx, cx + leanX * 0.6, shoulderY + 2, cx - 9 * s, shoulderY + 6, 3.6, '#991b1b', '#fbbf24');
+  ctx.save();
+  ctx.fillStyle = '#991b1b'; ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 1.0;
+  ctx.beginPath(); ctx.moveTo(cx - 5 + leanX * 0.8, shoulderY); ctx.lineTo(cx + 5.5 + leanX * 0.8, shoulderY); ctx.lineTo(cx + 5.8 + leanX * 0.2, hipY + 2); ctx.lineTo(cx - 5.8 + leanX * 0.2, hipY + 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#e4b796'; ctx.beginPath(); ctx.arc(cx + leanX, headY, 5.2, 0, tau); ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
 
 function renderVillagerFrame(ctx, cx, groundY, opts) {
+  if (opts.state === 'fire_kata') return renderFireKataFrame(ctx, cx, groundY, opts);
+  if (opts.state === 'fire_jet') return renderFireJetFrame(ctx, cx, groundY, opts);
   if (opts.state === 'air_levitate') return renderAirLevitateFrame(ctx, cx, groundY, opts);
   if (opts.state === 'air_flight') return renderAirFlightFrame(ctx, cx, groundY, opts);
   if (opts.state === 'earth_stomp') {
@@ -1207,45 +1286,50 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     const handX = 11 * f * scale;
     const handY = -16 * scale;
 
-    if (bender === 'fire') {
-      for (let i = 0; i < 3; i++) {
-        const a = phase + (i * Math.PI * 2) / 3;
-        const ox = Math.cos(a) * 16 * scale;
-        const oy = -16 * scale + Math.sin(a) * 7 * scale;
-        const grad = ctx.createRadialGradient(ox, oy, 0.5, ox, oy, 5.5);
-        grad.addColorStop(0, '#fef08a');
-        grad.addColorStop(0.5, '#f97316');
-        grad.addColorStop(1, 'rgba(220, 38, 38, 0)');
-        ctx.fillStyle = grad;
+     if (bender === 'fire') {
+      const hasLightningMastery = Boolean(unit.subElement);
+      for (let d = 0; d < 2; d++) {
+        ctx.strokeStyle = d === 0 ? (hasLightningMastery ? 'rgba(56, 189, 248, 0.86)' : 'rgba(249, 115, 22, 0.88)') : 'rgba(254, 240, 138, 0.85)';
+        ctx.lineWidth = (3.4 - d * 1.1) * scale;
         ctx.beginPath();
-        ctx.arc(ox, oy, 5.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      if (isActivelyBending) {
-        for (let p = 0; p < 5; p++) {
-          const dist = (6 + p * 6.5 + ((gameTime * 40) % 6)) * scale;
-          const fx = handX + f * dist;
-          const fy = handY + Math.sin(gameTime * 18 + p) * 3.5 * scale;
-          const r = (3.5 + p * 1.4) * scale;
-          ctx.fillStyle = p < 2 ? 'rgba(254, 240, 138, 0.88)' : 'rgba(249, 115, 22, 0.72)';
-          ctx.beginPath();
-          ctx.arc(fx, fy, r, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-      if (unit.subElement || swing > 0.08) {
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 1.7;
-        ctx.beginPath();
-        let lx = handX;
-        let ly = handY;
-        ctx.moveTo(lx, ly);
-        for (let s = 0; s < 5; s++) {
-          lx += f * 6.5;
-          ly += (Math.sin(gameTime * 45 + s * 3) - 0.3) * 6;
-          ctx.lineTo(lx, ly);
+        for (let i = 0; i <= 14; i++) {
+          const t = i / 14, ang = phase * 1.6 + t * Math.PI * 2.4 + d * Math.PI;
+          const rx = Math.cos(ang) * (18 - t * 5) * scale, ry = (2 - t * 32) * scale + Math.sin(ang) * 4 * scale;
+          if (i === 0) ctx.moveTo(rx, ry); else ctx.lineTo(rx, ry);
         }
         ctx.stroke();
+      }
+      for (let i = 0; i < 3; i++) {
+        const a = phase + (i * Math.PI * 2) / 3, ox = Math.cos(a) * 18 * scale, oy = -16 * scale + Math.sin(a) * 7.5 * scale;
+        const grad = ctx.createRadialGradient(ox, oy, 0.5, ox, oy, 6.2);
+        grad.addColorStop(0, '#ffffff');
+        grad.addColorStop(0.45, hasLightningMastery && i === 0 ? '#38bdf8' : '#fef08a');
+        grad.addColorStop(1, hasLightningMastery && i === 0 ? 'rgba(2, 132, 199, 0)' : 'rgba(220, 38, 38, 0)');
+        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(ox, oy, 6.2, 0, Math.PI * 2); ctx.fill();
+      }
+      if (isActivelyBending) {
+        for (let p = 0; p < 6; p++) {
+          const dist = (6 + p * 6.5 + ((gameTime * 45) % 6)) * scale;
+          const fx = handX + f * dist, fy = handY + Math.sin(gameTime * 20 + p) * 4.0 * scale, r = (3.8 + p * 1.5) * scale;
+          ctx.fillStyle = p < 2 ? 'rgba(254, 240, 138, 0.92)' : hasLightningMastery && p >= 4 ? 'rgba(56, 189, 248, 0.78)' : 'rgba(249, 115, 22, 0.78)';
+          ctx.beginPath(); ctx.arc(fx, fy, r, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      if (hasLightningMastery || swing > 0.06 || isActivelyBending) {
+        const chiA = (gameTime * 10) % (Math.PI * 2);
+        ctx.strokeStyle = 'rgba(125, 211, 252, 0.85)'; ctx.lineWidth = 1.6 * scale;
+        ctx.beginPath(); ctx.arc(0, -16 * scale, 13 * scale, chiA, chiA + 2.2); ctx.stroke();
+        for (let b = 0; b < (isActivelyBending ? 2 : 1); b++) {
+          let lx = handX, ly = handY + (b - 0.5) * 3 * scale;
+          ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = (2.8 - b * 0.7) * scale;
+          ctx.beginPath(); ctx.moveTo(lx, ly);
+          for (let s = 0; s < 6; s++) {
+            lx += f * 7.2 * scale; ly += (Math.sin(gameTime * 52 + s * 2.7 + b * 4) - 0.15) * 6.5 * scale;
+            ctx.lineTo(lx, ly);
+          }
+          ctx.stroke();
+          ctx.strokeStyle = '#f0f9ff'; ctx.lineWidth = 1.1 * scale; ctx.stroke();
+        }
       }
     } else if (bender === 'water') {
       // === HIGH-END TAI-CHI WATERBENDING RIBBON & CRASHING TIDAL WHIP ===
@@ -2297,6 +2381,18 @@ export class SovereignPhysicsEngine {
         }
       }
     }
+    if (!game._firebendersSeeded && Array.isArray(game.villagers) && game.villagers.length > 6) {
+      game._firebendersSeeded = true;
+      let fireCount = 0;
+      for (const v of game.villagers) {
+        if (v && !v.isT101s && v.bender !== 'air' && fireCount < 3) {
+          v.bender = 'fire';
+          v.subElement = 'lightning';
+          v.swingAnim = 0.65;
+          fireCount++;
+        }
+      }
+    }
     
     if (this.camShakeIntensity > 0.1) {
       this.camShakeIntensity *= Math.exp(-clampedDt * 12);
@@ -2399,6 +2495,9 @@ export class SovereignPhysicsEngine {
           u._seismicCooldown = 0.95;
           this.triggerEarthbenderSeismicStomp(game, u);
         }
+      if (u.bender === 'fire' && (u.swingAnim || 0) <= 0 && ((Math.floor((game.time || 0) * 1.5) + (u.id || 0)) % 5 === 0)) {
+        u.swingAnim = 0.42;
+      }
       if (!u) continue;
 
       if ((u.blockAnim || 0) > 0) u.blockAnim = Math.max(0, u.blockAnim - clampedDt);
