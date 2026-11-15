@@ -4259,6 +4259,194 @@ export class PlanetaryFootpathOverlay {
 /* ============================================================================
  * 7. ONE-LINE INSTALLER FOR PrehistoricPlanetaryGame
  * ========================================================================== */
+const MASTERPLAN_HOME_LAYOUT = {
+  shipyard: [{ x: 780, y: 2108 }],
+shrine: [{ x: 780, y: 2205 }],
+town_center: [{ x: 780, y: 2320 }],
+market: [{ x: 780, y: 2435 }],
+quarry: [{ x: 640, y: 2205 }],
+sawmill: [{ x: 640, y: 2320 }],
+kitchen: [{ x: 640, y: 2435 }],
+forge: [{ x: 920, y: 2205 }],
+barracks: [{ x: 920, y: 2320 }],
+hut: [{ x: 920, y: 2435 }, { x: 510, y: 2320 }, { x: 510, y: 2435 }, { x: 510, y: 2205 }],
+tower: [{ x: 1065, y: 2205 }, { x: 1065, y: 2435 }],
+gatehouse: [{ x: 1065, y: 2320 }],
+};
+
+const WAR_MOTIVES = [
+{ reason: '🌾 Famine Raid → Kitchen', targetTypes: ['kitchen', 'market'] },
+{ reason: '⚖️ Avenging Kin → Barracks', targetTypes: ['barracks', 'tower', 'gatehouse'] },
+{ reason: '⚒️ Seizing Iron → Forge', targetTypes: ['forge', 'quarry', 'sawmill'] },
+{ reason: '💍 Ring Crusade → Citadel', targetTypes: ['town_center', 'shrine'] },
+];
+
+export class SovereignWorldOrderEngine {
+organizeCityLayouts(game) {
+if (!Array.isArray(game.buildings)) return;
+if (!game._imperialMasterplanApplied && game.buildings.length >= 10) {
+game._imperialMasterplanApplied = true;
+const counts = {};
+for (const b of game.buildings) {
+if (!b || b.owner !== 'player') continue;
+const idx = counts[b.type] || 0;
+counts[b.type] = idx + 1;
+const slots = MASTERPLAN_HOME_LAYOUT[b.type];
+if (slots && slots[idx]) {
+b.x = slots[idx].x;
+b.y = slots[idx].y;
+b._gridAligned = true;
+}
+}
+}
+for (const b of game.buildings) {
+if (!b || b._gridAligned) continue;
+if (b.type === 'town_center' || b.type === 'shipyard') { b._gridAligned = true; continue; }
+const center = game.buildings.find((tc) => tc && tc.owner === b.owner && tc.type === 'town_center') || { x: b.owner === 'player' ? 780 : b.x, y: 2320 };
+const cols = [-270, -135, 0, 135, 270, 405], rows = [-115, 0, 115, 230];
+let bestSpot = null, bestDist = Infinity;
+for (const dy of rows) {
+for (const dx of cols) {
+if (dx === 0 && dy === 0) continue;
+const cx = wrapX(center.x + dx, WORLD_W), cy = Math.max(2165, Math.min(2680, center.y + dy));
+const occupied = game.buildings.some((o) => o && o !== b && Math.hypot(wrapDX(cx, o.x), cy - o.y) < 105);
+if (!occupied) {
+const d = Math.hypot(wrapDX(b.x, cx), b.y - cy);
+if (d < bestDist) { bestDist = d; bestSpot = { x: cx, y: cy }; }
+}
+}
+}
+if (bestSpot) { b.x = bestSpot.x; b.y = bestSpot.y; }
+b._gridAligned = true;
+}
+}
+
+drawCityBoulevardsAndPlazas(ctx, game, invTilt) {
+if (!Array.isArray(game.buildings) || !game.cam) return;
+const viewHalfW = (game.canvas.width * 0.65) / game.cam.zoom;
+ctx.save();
+for (let i = 0; i < game.buildings.length; i++) {
+const a = game.buildings[i];
+if (!a) continue;
+const ax = wrapDX(game.cam.x, a.x);
+if (Math.abs(ax) > viewHalfW + 180) continue;
+const ay = a.y - game.cam.y;
+for (let j = i + 1; j < game.buildings.length; j++) {
+const b = game.buildings[j];
+if (!b || b.owner !== a.owner) continue;
+const dx = wrapDX(a.x, b.x), dy = b.y - a.y, dist = Math.hypot(dx, dy);
+if (dist > 10 && dist <= 165 && (Math.abs(dx) < 25 || Math.abs(dy) < 25)) {
+ctx.strokeStyle = 'rgba(214, 195, 165, 0.42)'; ctx.lineWidth = 18 * invTilt;
+ctx.beginPath(); ctx.moveTo(ax, ay + 4); ctx.lineTo(ax + dx, ay + dy + 4); ctx.stroke();
+ctx.strokeStyle = 'rgba(120, 113, 108, 0.52)'; ctx.lineWidth = 12 * invTilt;
+ctx.beginPath(); ctx.moveTo(ax, ay + 4); ctx.lineTo(ax + dx, ay + dy + 4); ctx.stroke();
+}
+}
+const r = (a.radius || 32) * 1.38;
+ctx.fillStyle = a.owner === 'player' ? 'rgba(168, 162, 158, 0.34)' : 'rgba(120, 113, 108, 0.28)';
+ctx.strokeStyle = a.owner === 'player' ? 'rgba(251, 191, 36, 0.48)' : 'rgba(168, 162, 158, 0.38)';
+ctx.lineWidth = 1.4;
+ctx.beginPath(); ctx.ellipse(ax, ay + 4, r, r * 0.48 * invTilt, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+}
+ctx.restore();
+}
+  
+stepWorldOrderAndLifecycle(game, dt) {
+if (!game) return;
+// 1. Relocate initial vanguard raiders to their homeland AI capitals as Clan Children/Youths
+if (!game._vanguardRelocatedToHomeland && Array.isArray(game.enemies) && Array.isArray(game.aiPlayers) && game.aiPlayers.length > 0) {
+game._vanguardRelocatedToHomeland = true;
+for (let i = 0; i < game.enemies.length; i++) {
+const e = game.enemies[i];
+if (!e || e.isBoss) continue;
+const ai = game.aiPlayers.find((a) => a.id === e.aiOwnerId) || game.aiPlayers[i % game.aiPlayers.length];
+if (ai && Math.abs(wrapDX(780, e.x)) < 700) {
+e.x = wrapX(ai.x + ((i % 4) - 1.5) * 42, WORLD_W);
+e.y = Math.max(2160, Math.min(2520, (ai.y || 2320) + Math.floor(i / 4) * 38));
+e.age = 7 + (i % 4) * 3;
+e.childScale = 0.52 + 0.48 * (e.age / 18);
+e.lifeStage = e.age < 12 ? 'child' : 'youth';
+}
+}
+}
+
+// 2. Grow Enemy Children -> Youths -> Motivated Adult Raiders
+if (Array.isArray(game.enemies)) {
+for (const e of game.enemies) {
+if (!e || e.isBoss) continue;
+if (typeof e._lifecycleInitialized === 'undefined') {
+e._lifecycleInitialized = true;
+if (!e.ringCrusader && e.age > 18 && Math.random() < 0.65) e.age = 5 + Math.random() * 7;
+}
+e.age = (e.age ?? 8) + dt * 0.45;
+if (e.age < 18) {
+e.childScale = Math.max(0.5, Math.min(0.95, 0.5 + 0.5 * (e.age / 18)));
+e.lifeStage = e.age < 12 ? 'child' : 'youth';
+const homeAI = Array.isArray(game.aiPlayers) ? game.aiPlayers.find((a) => a.id === e.aiOwnerId) : null;
+if (homeAI) {
+const dxH = wrapDX(e.x, homeAI.x), dyH = (homeAI.y || 2320) - e.y;
+if (Math.hypot(dxH, dyH) > 150) {
+e.x = wrapX(e.x + Math.sign(dxH) * 32 * dt, WORLD_W);
+e.y += Math.sign(dyH) * 20 * dt;
+}
+}
+e._motiveBadge = e.age < 12 ? `👶 Clan Child (${Math.floor(e.age)}y)` : `🧒 Training Youth (${Math.floor(e.age)}y)`;
+} else {
+e.childScale = 1.0;
+e.lifeStage = 'adult';
+if (!e.warMotive) {
+const spec = WAR_MOTIVES[(e.id || 0) % WAR_MOTIVES.length];
+e.warMotive = spec.reason;
+e.motiveTargetTypes = spec.targetTypes;
+e._motiveBadge = spec.reason;
+}
+if (Array.isArray(game.buildings) && e.motiveTargetTypes && !e.controlledByRing) {
+const targetB = game.buildings.find((b) => b && b.owner === 'player' && e.motiveTargetTypes.includes(b.type));
+if (targetB && Math.hypot(wrapDX(e.x, targetB.x), targetB.y - e.y) < (targetB.radius || 32) + 24 && (e.attackCooldown || 0) <= 0) {
+e.attackCooldown = 1.35;
+e.swingAnim = 0.5;
+targetB.hp = Math.max(15, (targetB.hp || 500) - (e.attack || 18) * 0.45);
+targetB._hitShake = 0.35;
+targetB._scorchTimer = 3.5;
+}
+}
+}
+}
+}
+
+// 3. Evaluate Power/Bending Collateral Physics & Consequence Memory
+if (Array.isArray(game.villagers) && Array.isArray(game.buildings)) {
+for (const u of game.villagers) {
+if (!u) continue;
+if ((u._consequenceTimer || 0) > 0) u._consequenceTimer = Math.max(0, u._consequenceTimer - dt);
+if ((u._blastCheckCd || 0) > 0) u._blastCheckCd = Math.max(0, u._blastCheckCd - dt);
+if (u.bender && ((u.swingAnim || 0) > 0.25 || (u.kataTimer || 0) > 0) && (u._blastCheckCd || 0) <= 0) {
+u._blastCheckCd = 1.6;
+const nearB = game.buildings.find((b) => b && b.owner === 'player' && Math.hypot(wrapDX(u.x, b.x), u.y - b.y) < 78 + (b.radius || 30));
+if (nearB) {
+if ((u.cautionLevel || 0) >= 0.4) {
+u._consequenceTag = `🛡️ Restraining ${u.bender.toUpperCase()} near ${nearB.name}`;
+u._consequenceTimer = 2.8;
+} else {
+nearB.hp = Math.max(50, (nearB.hp || 500) - 14);
+nearB._hitShake = 0.38;
+nearB._scorchTimer = 3.5;
+u.cautionLevel = Math.min(1.0, (u.cautionLevel || 0) + 0.45);
+u._consequenceTag = `😟 Remorse: Scorched ${nearB.name}!`;
+u._consequenceTimer = 3.8;
+}
+}
+}
+}
+for (const b of game.buildings) {
+if (!b) continue;
+if ((b._hitShake || 0) > 0) b._hitShake = Math.max(0, b._hitShake - dt * 2.5);
+if ((b._scorchTimer || 0) > 0) b._scorchTimer = Math.max(0, b._scorchTimer - dt);
+if (b.owner === 'player' && b.hp < b.maxHp) b.hp = Math.min(b.maxHp, b.hp + dt * 3.5);
+}
+}
+}
+}
 
 export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
   const proto =
@@ -4272,11 +4460,14 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
   const footpaths = new PlanetaryFootpathOverlay({ cellSize: 28 });
   const combatVFX = new CombatAndPowersVFXRenderer();
   const physicsEngine = new SovereignPhysicsEngine();
+  const worldOrder = new SovereignWorldOrderEngine();
 
   const origUpdate = proto.update;
   if (typeof origUpdate === 'function') {
     proto.update = function (dt) {
+      worldOrder.organizeCityLayouts(this);
       origUpdate.call(this, dt);
+      worldOrder.stepWorldOrderAndLifecycle(this, dt);
       footpaths.updateTraffic(this.villagers, dt);
       physicsEngine.stepWorldPhysics(this, dt, footpaths);
     };
@@ -4389,6 +4580,7 @@ return result;
       );
 
       footpaths.drawVisiblePaths(ctx, this.cam, this.canvas.width, this.canvas.height);
+      worldOrder.drawCityBoulevardsAndPlazas(ctx, this, invTilt);
 
       const viewHalfW = (this.canvas.width * 0.65) / this.cam.zoom;
       const rY = RIVER_Y - this.cam.y;
@@ -4465,6 +4657,17 @@ return result;
       this.time || 0,
       this.showFloatingBadges !== false
     );
+    if (this.showFloatingBadges !== false && ((unit._consequenceTimer || 0) > 0 || (isEnemy && unit._motiveBadge))) {
+ctx.save();
+ctx.translate(dx, sy);
+ctx.scale(1, invTilt);
+ctx.font = 'bold 9.5px Inter, sans-serif';
+ctx.textAlign = 'center';
+const label = (unit._consequenceTimer || 0) > 0 ? unit._consequenceTag : unit._motiveBadge;
+ctx.fillStyle = (unit._consequenceTimer || 0) > 0 ? (label.includes('Remorse') ? '#fda4af' : '#93c5fd') : '#fde047';
+ctx.fillText(label, 0, -52);
+ctx.restore();
+    }
 
     if (unit.customTool || unit.customMagic) {
       ctx.save();
@@ -4516,10 +4719,11 @@ return result;
       ctx.stroke();
       ctx.restore();
     }
+    const shakeX = (building._hitShake || 0) > 0 ? Math.sin((this.time || 0) * 55) * 3.5 : 0;
     envBank.drawGameBuilding(
       ctx,
       building,
-      dx,
+      dx + shakeX,
       sy,
       invTilt,
       this.time || 0,
