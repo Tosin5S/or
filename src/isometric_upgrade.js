@@ -4369,10 +4369,10 @@ if (!game) return;
   let youthCount = game.enemies.filter((e) => e && !e.isBoss && e.aiOwnerId === ai.id && (e.age ?? 8) < 18).length;
   while (youthCount < 4) {
     const idx = youthCount++;
-    const age = 6 + idx * 3.2;
+    const age = (() => { const cc = game.enemies.filter((e) => e && !e.isBoss && e.aiOwnerId === ai.id && (e.age ?? 8) < 12).length; return cc < 2 ? 5 + cc * 3 : 13 + Math.max(0, idx - 2) * 2; })();
     game.enemies.push({ id: (game.nextId ? game.nextId++ : Math.floor(Math.random() * 1e9)), aiOwnerId: ai.id, x: wrapX(ai.x + ((idx % 4) - 1.5) * 42, WORLD_W), y: 2320 + (idx % 2 === 0 ? -24 : 28), age, childScale: 0.5 + 0.5 * (age / 18), lifeStage: age < 12 ? 'child' : 'youth', _lifecycleInitialized: true, hp: 90, maxHp: 90, attack: 10, speed: 42, radius: 14, color: ai.color || '#ef4444', icon: ai.icon || '\u2694\uFE0F', name: `${ai.tribe || 'Clan'} ${age < 12 ? 'Child' : 'Youth'}` });
   }
-}
+}        const _ty = game.enemies.filter((e) => e && !e.isBoss && e.aiOwnerId === ai.id && (e.age ?? 8) < 18); if (_ty.filter((e) => (e.age ?? 8) < 12).length < 2 && _ty.length > 0) { _ty.sort((a, b) => (a.age ?? 8) - (b.age ?? 8)); const _y = _ty.find((e) => (e.age ?? 8) >= 12) || _ty[0]; if (_y) { _y.age = 6; _y.lifeStage = 'child'; _y.childScale = 0.5 + 0.5 * (6 / 18); } }
 }
   }
   
@@ -4402,7 +4402,7 @@ if (typeof e._lifecycleInitialized === 'undefined') {
 e._lifecycleInitialized = true;
 if (!e.ringCrusader && e.age > 18 && Math.random() < 0.65) e.age = 5 + Math.random() * 7;
 }
-e.age = (e.age ?? 8) + dt * 0.45;
+e.age = (e.age ?? 8) + dt * 0.12;
 if (e.age < 18) {
 e.childScale = Math.max(0.5, Math.min(0.95, 0.5 + 0.5 * (e.age / 18)));
 e.lifeStage = e.age < 12 ? 'child' : 'youth';
@@ -4503,7 +4503,7 @@ if (typeof origSpectateAICapital === 'function') {
     if (this.cam) {
       this.cam.followSelected = false;
     }
-    const result = origSpectateAICapital.call(this, aiId);
+    const result = origSpectateAICapital.call(this, aiId); if (typeof document !== 'undefined') { const dipPanel = document.getElementById('diplomacyPanel'); if (dipPanel) dipPanel.classList.add('hidden'); document.querySelectorAll('.fixed.inset-0').forEach((overlay) => { if (overlay && overlay.tagName !== 'CANVAS' && !overlay.classList.contains('hidden')) overlay.classList.add('hidden'); }); }
     const ai = Array.isArray(this.aiPlayers) ? this.aiPlayers.find((a) => a && a.id === aiId) : null;
     if (ai && this.cam) {
       this.cam.targetX = ai.x;
