@@ -1,5 +1,5 @@
 # One Ring
-Play live: https://pt.101-s.net/
+Play live: https://or.101-s.net/
 
 ![One Ring](assets/screenshot.png)
 
