@@ -4353,6 +4353,30 @@ ctx.restore();
   
 stepWorldOrderAndLifecycle(game, dt) {
 if (!game) return;
+// 0. Ensure Rival Homeland Settlements & Clan Children
+  if (Array.isArray(game.aiPlayers)) {
+    for (const ai of game.aiPlayers) {
+  if (!ai) continue;
+  ai.y = 2320;
+  if (Array.isArray(game.buildings)) {
+    const cap = game.buildings.find((b) => b && b.owner === ai.id && b.type === 'town_center');
+    if (!cap) game.buildings.push({ id: (game.nextId ? game.nextId++ : Math.floor(Math.random() * 1e9)), type: 'town_center', name: `${ai.tribe} Capital`, icon: ai.icon || '\uD83C\uDFDB\uFE0F', x: ai.x, y: 2320, hp: 2100, maxHp: 2100, radius: 52, owner: ai.id, shootTimer: 0 }); else cap.y = 2320;
+    const hasHut = game.buildings.some((b) => b && b.owner === ai.id && b.type === 'hut');
+    if (!hasHut) game.buildings.push({ id: (game.nextId ? game.nextId++ : Math.floor(Math.random() * 1e9)), type: 'hut', name: `${ai.tribe} Clan Nursery`, icon: '\uD83D\uDED6', x: wrapX(ai.x - 135, WORLD_W), y: 2320, hp: 650, maxHp: 650, radius: 26, owner: ai.id });
+    const hasBarracks = game.buildings.some((b) => b && b.owner === ai.id && b.type === 'barracks');
+    if (!hasBarracks) game.buildings.push({ id: (game.nextId ? game.nextId++ : Math.floor(Math.random() * 1e9)), type: 'barracks', name: `${ai.tribe} Training Grounds`, icon: '\u2694\uFE0F', x: wrapX(ai.x + 135, WORLD_W), y: 2320, hp: 900, maxHp: 900, radius: 32, owner: ai.id });
+  }if (Array.isArray(game.enemies)) {
+  let youthCount = game.enemies.filter((e) => e && !e.isBoss && e.aiOwnerId === ai.id && (e.age ?? 8) < 18).length;
+  while (youthCount < 4) {
+    const idx = youthCount++;
+    const age = 6 + idx * 3.2;
+    game.enemies.push({ id: (game.nextId ? game.nextId++ : Math.floor(Math.random() * 1e9)), aiOwnerId: ai.id, x: wrapX(ai.x + ((idx % 4) - 1.5) * 42, WORLD_W), y: 2320 + (idx % 2 === 0 ? -24 : 28), age, childScale: 0.5 + 0.5 * (age / 18), lifeStage: age < 12 ? 'child' : 'youth', _lifecycleInitialized: true, hp: 90, maxHp: 90, attack: 10, speed: 42, radius: 14, color: ai.color || '#ef4444', icon: ai.icon || '\u2694\uFE0F', name: `${ai.tribe || 'Clan'} ${age < 12 ? 'Child' : 'Youth'}` });
+  }
+}
+}
+  }
+  
+      
 // 1. Relocate initial vanguard raiders to their homeland AI capitals as Clan Children/Youths
 if (!game._vanguardRelocatedToHomeland && Array.isArray(game.enemies) && Array.isArray(game.aiPlayers) && game.aiPlayers.length > 0) {
 game._vanguardRelocatedToHomeland = true;
@@ -4472,7 +4496,29 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
       physicsEngine.stepWorldPhysics(this, dt, footpaths);
     };
   }
-
+const origSpectateAICapital = proto.spectateAICapital;
+if (typeof origSpectateAICapital === 'function') {
+  proto.spectateAICapital = function (aiId) {
+    this.duelCamActive = false;
+    if (this.cam) {
+      this.cam.followSelected = false;
+    }
+    const result = origSpectateAICapital.call(this, aiId);
+    const ai = Array.isArray(this.aiPlayers) ? this.aiPlayers.find((a) => a && a.id === aiId) : null;
+    if (ai && this.cam) {
+      this.cam.targetX = ai.x;
+      this.cam.targetY = ai.y || 2320;
+      if ((this.cam.targetZoom || 1) < 0.85) {
+        this.cam.targetZoom = 1.15;
+      }
+    }
+    if (typeof this.updateZoomHUD === 'function') {
+      this.updateZoomHUD();
+    }
+    return result;
+  };
+}
+  
 const origFocusWorldBoss = proto.focusWorldBoss;
   if (typeof origFocusWorldBoss === 'function') {
     proto.focusWorldBoss = function () {
