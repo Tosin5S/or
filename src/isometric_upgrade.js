@@ -2369,30 +2369,7 @@ export class SovereignPhysicsEngine {
         }
       }
     }
-    if (!game._airbendersSeeded && Array.isArray(game.villagers) && game.villagers.length > 3) {
-      game._airbendersSeeded = true;
-      let airCount = 0;
-      for (const v of game.villagers) {
-        if (v && !v.isT101s && airCount < 3 && (!v.bender || v.bender === 'air')) {
-          v.bender = 'air';
-          v.subElement = 'flight';
-          v.skySoar = airCount === 0;
-          airCount++;
-        }
-      }
-    }
-    if (!game._firebendersSeeded && Array.isArray(game.villagers) && game.villagers.length > 6) {
-      game._firebendersSeeded = true;
-      let fireCount = 0;
-      for (const v of game.villagers) {
-        if (v && !v.isT101s && v.bender !== 'air' && fireCount < 3) {
-          v.bender = 'fire';
-          v.subElement = 'lightning';
-          v.swingAnim = 0.65;
-          fireCount++;
-        }
-      }
-    }
+    // Rare bending (~8%) is managed by SovereignWorldOrderEngine
     
     if (this.camShakeIntensity > 0.1) {
       this.camShakeIntensity *= Math.exp(-clampedDt * 12);
@@ -4281,196 +4258,7 @@ const WAR_MOTIVES = [
 { reason: '💍 Ring Crusade → Citadel', targetTypes: ['town_center', 'shrine'] },
 ];
 
-export class SovereignWorldOrderEngine {
-organizeCityLayouts(game) {
-if (!Array.isArray(game.buildings)) return;
-if (!game._imperialMasterplanApplied && game.buildings.length >= 10) {
-game._imperialMasterplanApplied = true;
-const counts = {};
-for (const b of game.buildings) {
-if (!b || b.owner !== 'player') continue;
-const idx = counts[b.type] || 0;
-counts[b.type] = idx + 1;
-const slots = MASTERPLAN_HOME_LAYOUT[b.type];
-if (slots && slots[idx]) {
-b.x = slots[idx].x;
-b.y = slots[idx].y;
-b._gridAligned = true;
-}
-}
-}
-for (const b of game.buildings) {
-if (!b || b._gridAligned) continue;
-if (b.type === 'town_center' || b.type === 'shipyard') { b._gridAligned = true; continue; }
-const center = game.buildings.find((tc) => tc && tc.owner === b.owner && tc.type === 'town_center') || { x: b.owner === 'player' ? 780 : b.x, y: 2320 };
-const cols = [-270, -135, 0, 135, 270, 405], rows = [-115, 0, 115, 230];
-let bestSpot = null, bestDist = Infinity;
-for (const dy of rows) {
-for (const dx of cols) {
-if (dx === 0 && dy === 0) continue;
-const cx = wrapX(center.x + dx, WORLD_W), cy = Math.max(2165, Math.min(2680, center.y + dy));
-const occupied = game.buildings.some((o) => o && o !== b && Math.hypot(wrapDX(cx, o.x), cy - o.y) < 105);
-if (!occupied) {
-const d = Math.hypot(wrapDX(b.x, cx), b.y - cy);
-if (d < bestDist) { bestDist = d; bestSpot = { x: cx, y: cy }; }
-}
-}
-}
-if (bestSpot) { b.x = bestSpot.x; b.y = bestSpot.y; }
-b._gridAligned = true;
-}
-}
-
-drawCityBoulevardsAndPlazas(ctx, game, invTilt) {
-if (!Array.isArray(game.buildings) || !game.cam) return;
-const viewHalfW = (game.canvas.width * 0.65) / game.cam.zoom;
-ctx.save();
-for (let i = 0; i < game.buildings.length; i++) {
-const a = game.buildings[i];
-if (!a) continue;
-const ax = wrapDX(game.cam.x, a.x);
-if (Math.abs(ax) > viewHalfW + 180) continue;
-const ay = a.y - game.cam.y;
-for (let j = i + 1; j < game.buildings.length; j++) {
-const b = game.buildings[j];
-if (!b || b.owner !== a.owner) continue;
-const dx = wrapDX(a.x, b.x), dy = b.y - a.y, dist = Math.hypot(dx, dy);
-if (dist > 10 && dist <= 165 && (Math.abs(dx) < 25 || Math.abs(dy) < 25)) {
-ctx.strokeStyle = 'rgba(214, 195, 165, 0.42)'; ctx.lineWidth = 18 * invTilt;
-ctx.beginPath(); ctx.moveTo(ax, ay + 4); ctx.lineTo(ax + dx, ay + dy + 4); ctx.stroke();
-ctx.strokeStyle = 'rgba(120, 113, 108, 0.52)'; ctx.lineWidth = 12 * invTilt;
-ctx.beginPath(); ctx.moveTo(ax, ay + 4); ctx.lineTo(ax + dx, ay + dy + 4); ctx.stroke();
-}
-}
-const r = (a.radius || 32) * 1.38;
-ctx.fillStyle = a.owner === 'player' ? 'rgba(168, 162, 158, 0.34)' : 'rgba(120, 113, 108, 0.28)';
-ctx.strokeStyle = a.owner === 'player' ? 'rgba(251, 191, 36, 0.48)' : 'rgba(168, 162, 158, 0.38)';
-ctx.lineWidth = 1.4;
-ctx.beginPath(); ctx.ellipse(ax, ay + 4, r, r * 0.48 * invTilt, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-}
-ctx.restore();
-}
-  
-stepWorldOrderAndLifecycle(game, dt) {
-if (!game) return;
-// 0. Ensure Rival Homeland Settlements & Clan Children
-  if (Array.isArray(game.aiPlayers)) {
-    for (const ai of game.aiPlayers) {
-  if (!ai) continue;
-  ai.y = 2320;
-  if (Array.isArray(game.buildings)) {
-    const cap = game.buildings.find((b) => b && b.owner === ai.id && b.type === 'town_center');
-    if (!cap) game.buildings.push({ id: (game.nextId ? game.nextId++ : Math.floor(Math.random() * 1e9)), type: 'town_center', name: `${ai.tribe} Capital`, icon: ai.icon || '\uD83C\uDFDB\uFE0F', x: ai.x, y: 2320, hp: 2100, maxHp: 2100, radius: 52, owner: ai.id, shootTimer: 0 }); else cap.y = 2320;
-    const hasHut = game.buildings.some((b) => b && b.owner === ai.id && b.type === 'hut');
-    if (!hasHut) game.buildings.push({ id: (game.nextId ? game.nextId++ : Math.floor(Math.random() * 1e9)), type: 'hut', name: `${ai.tribe} Clan Nursery`, icon: '\uD83D\uDED6', x: wrapX(ai.x - 135, WORLD_W), y: 2320, hp: 650, maxHp: 650, radius: 26, owner: ai.id });
-    const hasBarracks = game.buildings.some((b) => b && b.owner === ai.id && b.type === 'barracks');
-    if (!hasBarracks) game.buildings.push({ id: (game.nextId ? game.nextId++ : Math.floor(Math.random() * 1e9)), type: 'barracks', name: `${ai.tribe} Training Grounds`, icon: '\u2694\uFE0F', x: wrapX(ai.x + 135, WORLD_W), y: 2320, hp: 900, maxHp: 900, radius: 32, owner: ai.id });
-  }if (Array.isArray(game.enemies)) {
-  let youthCount = game.enemies.filter((e) => e && !e.isBoss && e.aiOwnerId === ai.id && (e.age ?? 8) < 18).length;
-  while (youthCount < 4) {
-    const idx = youthCount++;
-    const age = (() => { const cc = game.enemies.filter((e) => e && !e.isBoss && e.aiOwnerId === ai.id && (e.age ?? 8) < 12).length; return cc < 2 ? 5 + cc * 3 : 13 + Math.max(0, idx - 2) * 2; })();
-    game.enemies.push({ id: (game.nextId ? game.nextId++ : Math.floor(Math.random() * 1e9)), aiOwnerId: ai.id, x: wrapX(ai.x + ((idx % 4) - 1.5) * 42, WORLD_W), y: 2320 + (idx % 2 === 0 ? -24 : 28), age, childScale: 0.5 + 0.5 * (age / 18), lifeStage: age < 12 ? 'child' : 'youth', _lifecycleInitialized: true, hp: 90, maxHp: 90, attack: 10, speed: 42, radius: 14, color: ai.color || '#ef4444', icon: ai.icon || '\u2694\uFE0F', name: `${ai.tribe || 'Clan'} ${age < 12 ? 'Child' : 'Youth'}` });
-  }
-}        const _ty = game.enemies.filter((e) => e && !e.isBoss && e.aiOwnerId === ai.id && (e.age ?? 8) < 18); if (_ty.filter((e) => (e.age ?? 8) < 12).length < 2 && _ty.length > 0) { _ty.sort((a, b) => (a.age ?? 8) - (b.age ?? 8)); const _y = _ty.find((e) => (e.age ?? 8) >= 12) || _ty[0]; if (_y) { _y.age = 6; _y.lifeStage = 'child'; _y.childScale = 0.5 + 0.5 * (6 / 18); } }
-}
-  }
-  
-      
-// 1. Relocate initial vanguard raiders to their homeland AI capitals as Clan Children/Youths
-if (!game._vanguardRelocatedToHomeland && Array.isArray(game.enemies) && Array.isArray(game.aiPlayers) && game.aiPlayers.length > 0) {
-game._vanguardRelocatedToHomeland = true;
-for (let i = 0; i < game.enemies.length; i++) {
-const e = game.enemies[i];
-if (!e || e.isBoss) continue;
-const ai = game.aiPlayers.find((a) => a.id === e.aiOwnerId) || game.aiPlayers[i % game.aiPlayers.length];
-if (ai && Math.abs(wrapDX(780, e.x)) < 700) {
-e.x = wrapX(ai.x + ((i % 4) - 1.5) * 42, WORLD_W);
-e.y = Math.max(2160, Math.min(2520, (ai.y || 2320) + Math.floor(i / 4) * 38));
-e.age = 7 + (i % 4) * 3;
-e.childScale = 0.52 + 0.48 * (e.age / 18);
-e.lifeStage = e.age < 12 ? 'child' : 'youth';
-}
-}
-}
-
-// 2. Grow Enemy Children -> Youths -> Motivated Adult Raiders
-if (Array.isArray(game.enemies)) {
-for (const e of game.enemies) {
-if (!e || e.isBoss) continue;
-if (typeof e._lifecycleInitialized === 'undefined') {
-e._lifecycleInitialized = true;
-if (!e.ringCrusader && e.age > 18 && Math.random() < 0.65) e.age = 5 + Math.random() * 7;
-}
-e.age = (e.age ?? 8) + dt * 0.12;
-if (e.age < 18) {
-e.childScale = Math.max(0.5, Math.min(0.95, 0.5 + 0.5 * (e.age / 18)));
-e.lifeStage = e.age < 12 ? 'child' : 'youth';
-const homeAI = Array.isArray(game.aiPlayers) ? game.aiPlayers.find((a) => a.id === e.aiOwnerId) : null;
-if (homeAI) {
-const dxH = wrapDX(e.x, homeAI.x), dyH = (homeAI.y || 2320) - e.y;
-if (Math.hypot(dxH, dyH) > 150) {
-e.x = wrapX(e.x + Math.sign(dxH) * 32 * dt, WORLD_W);
-e.y += Math.sign(dyH) * 20 * dt;
-}
-}
-e._motiveBadge = e.age < 12 ? `👶 Clan Child (${Math.floor(e.age)}y)` : `🧒 Training Youth (${Math.floor(e.age)}y)`;
-} else {
-e.childScale = 1.0;
-e.lifeStage = 'adult';
-if (!e.warMotive) {
-const spec = WAR_MOTIVES[(e.id || 0) % WAR_MOTIVES.length];
-e.warMotive = spec.reason;
-e.motiveTargetTypes = spec.targetTypes;
-e._motiveBadge = spec.reason;
-}
-if (Array.isArray(game.buildings) && e.motiveTargetTypes && !e.controlledByRing) {
-const targetB = game.buildings.find((b) => b && b.owner === 'player' && e.motiveTargetTypes.includes(b.type));
-if (targetB && Math.hypot(wrapDX(e.x, targetB.x), targetB.y - e.y) < (targetB.radius || 32) + 24 && (e.attackCooldown || 0) <= 0) {
-e.attackCooldown = 1.35;
-e.swingAnim = 0.5;
-targetB.hp = Math.max(15, (targetB.hp || 500) - (e.attack || 18) * 0.45);
-targetB._hitShake = 0.35;
-targetB._scorchTimer = 3.5;
-}
-}
-}
-}
-}
-
-// 3. Evaluate Power/Bending Collateral Physics & Consequence Memory
-if (Array.isArray(game.villagers) && Array.isArray(game.buildings)) {
-for (const u of game.villagers) {
-if (!u) continue;
-if ((u._consequenceTimer || 0) > 0) u._consequenceTimer = Math.max(0, u._consequenceTimer - dt);
-if ((u._blastCheckCd || 0) > 0) u._blastCheckCd = Math.max(0, u._blastCheckCd - dt);
-if (u.bender && ((u.swingAnim || 0) > 0.25 || (u.kataTimer || 0) > 0) && (u._blastCheckCd || 0) <= 0) {
-u._blastCheckCd = 1.6;
-const nearB = game.buildings.find((b) => b && b.owner === 'player' && Math.hypot(wrapDX(u.x, b.x), u.y - b.y) < 78 + (b.radius || 30));
-if (nearB) {
-if ((u.cautionLevel || 0) >= 0.4) {
-u._consequenceTag = `🛡️ Restraining ${u.bender.toUpperCase()} near ${nearB.name}`;
-u._consequenceTimer = 2.8;
-} else {
-nearB.hp = Math.max(50, (nearB.hp || 500) - 14);
-nearB._hitShake = 0.38;
-nearB._scorchTimer = 3.5;
-u.cautionLevel = Math.min(1.0, (u.cautionLevel || 0) + 0.45);
-u._consequenceTag = `😟 Remorse: Scorched ${nearB.name}!`;
-u._consequenceTimer = 3.8;
-}
-}
-}
-}
-for (const b of game.buildings) {
-if (!b) continue;
-if ((b._hitShake || 0) > 0) b._hitShake = Math.max(0, b._hitShake - dt * 2.5);
-if ((b._scorchTimer || 0) > 0) b._scorchTimer = Math.max(0, b._scorchTimer - dt);
-if (b.owner === 'player' && b.hp < b.maxHp) b.hp = Math.min(b.maxHp, b.hp + dt * 3.5);
-}
-}
-}
-}
+const WEAPON_ARSENAL = [ { id: 'spear', label: '🗡️ Spear', bonusDmg: 4 }, { id: 'sword', label: '⚔️ Sword', bonusDmg: 5 }, { id: 'bow', label: '🏹 Bow', bonusDmg: 3 }, { id: 'battleaxe', label: '🪓 Battle-Axe', bonusDmg: 7 }, { id: 'warhammer', label: '🔨 War-Maul', bonusDmg: 8 }, { id: 'twin_daggers', label: '🗡️ Twin Daggers', bonusDmg: 4 }, ]; const PROFESSIONS = [ { id: 'builder', label: '🔨 Builder' }, { id: 'cook', label: '🍲 Cook' }, { id: 'fisherman', label: '🎣 Fisherman' }, { id: 'hunter', label: '🏹 Hunter' }, { id: 'trader', label: '⚖️ Trader' }, { id: 'miner', label: '⛏️ Gatherer' }, { id: 'soldier', label: '🛡️ Soldier' }, ]; export class SovereignWorldOrderEngine { organizeCityLayouts(game) { if (!Array.isArray(game.buildings)) return; if (!game._imperialMasterplanApplied && game.buildings.length >= 10) { game._imperialMasterplanApplied = true; const counts = {}; for (const b of game.buildings) { if (!b || b.owner !== 'player') continue; const idx = counts[b.type] || 0; counts[b.type] = idx + 1; const slots = MASTERPLAN_HOME_LAYOUT[b.type]; if (slots && slots[idx]) { b.x = slots[idx].x; b.y = slots[idx].y; b._gridAligned = true; } b.constructionProgress = b.type === 'forge' ? 0.42 : (b.type === 'hut' && idx === 1 ? 0.25 : 1.0); } } for (const b of game.buildings) { if (!b) continue; if (typeof b.constructionProgress !== 'number') b.constructionProgress = b.type === 'town_center' ? 1.0 : 0.08; if (b._gridAligned) continue; if (b.type === 'town_center' || b.type === 'shipyard') { b._gridAligned = true; continue; } const center = game.buildings.find((tc) => tc && tc.owner === b.owner && tc.type === 'town_center') || { x: b.owner === 'player' ? 780 : b.x, y: 2320 }; const cols = [-270, -135, 0, 135, 270, 405], rows = [-115, 0, 115, 230]; let bestSpot = null, bestDist = Infinity; for (const dy of rows) { for (const dx of cols) { if (dx === 0 && dy === 0) continue; const cx = wrapX(center.x + dx, WORLD_W), cy = Math.max(2165, Math.min(2680, center.y + dy)); if (!game.buildings.some((o) => o && o !== b && Math.hypot(wrapDX(cx, o.x), cy - o.y) < 105)) { const d = Math.hypot(wrapDX(b.x, cx), b.y - cy); if (d < bestDist) { bestDist = d; bestSpot = { x: cx, y: cy }; } } } } if (bestSpot) { b.x = bestSpot.x; b.y = bestSpot.y; } b._gridAligned = true; } } drawCityBoulevardsAndPlazas(ctx, game, invTilt) { if (!Array.isArray(game.buildings) || !game.cam) return; const viewHalfW = (game.canvas.width * 0.65) / game.cam.zoom; ctx.save(); for (let i = 0; i < game.buildings.length; i++) { const a = game.buildings[i]; if (!a) continue; const ax = wrapDX(game.cam.x, a.x); if (Math.abs(ax) > viewHalfW + 180) continue; const ay = a.y - game.cam.y; for (let j = i + 1; j < game.buildings.length; j++) { const b = game.buildings[j]; if (!b || b.owner !== a.owner) continue; const dx = wrapDX(a.x, b.x), dy = b.y - a.y, dist = Math.hypot(dx, dy); if (dist > 10 && dist <= 165 && (Math.abs(dx) < 25 || Math.abs(dy) < 25)) { ctx.strokeStyle = 'rgba(214, 195, 165, 0.42)'; ctx.lineWidth = 18 * invTilt; ctx.beginPath(); ctx.moveTo(ax, ay + 4); ctx.lineTo(ax + dx, ay + dy + 4); ctx.stroke(); ctx.strokeStyle = 'rgba(120, 113, 108, 0.52)'; ctx.lineWidth = 12 * invTilt; ctx.beginPath(); ctx.moveTo(ax, ay + 4); ctx.lineTo(ax + dx, ay + dy + 4); ctx.stroke(); } } const r = (a.radius || 32) * 1.38; ctx.fillStyle = a.owner === 'player' ? 'rgba(168, 162, 158, 0.34)' : 'rgba(120, 113, 108, 0.28)'; ctx.strokeStyle = a.owner === 'player' ? 'rgba(251, 191, 36, 0.48)' : 'rgba(168, 162, 158, 0.38)'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.ellipse(ax, ay + 4, r, r * 0.48 * invTilt, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); } ctx.restore(); } drawConstructionScaffolding(ctx, building, dx, sy, invTilt, timeSec) { const prog = typeof building.constructionProgress === 'number' ? building.constructionProgress : 1.0; if (prog >= 0.995) return; const r = building.radius || 32, h = 42 * (0.25 + 0.75 * prog); ctx.save(); ctx.translate(dx, sy); ctx.scale(1, invTilt); ctx.strokeStyle = '#b45309'; ctx.lineWidth = 2.0; for (const px of [-r * 0.85, -r * 0.35, r * 0.35, r * 0.85]) { ctx.beginPath(); ctx.moveTo(px, 6); ctx.lineTo(px, -h - 8); ctx.stroke(); } ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 1.4; for (let tier = 1; tier <= 3; tier++) { const ty = -(h * tier) / 3; ctx.beginPath(); ctx.moveTo(-r * 0.9, ty); ctx.lineTo(r * 0.9, ty); ctx.stroke(); } const barW = 54, barY = -h - 24; ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'; ctx.fillRect(-barW * 0.5, barY, barW, 6); ctx.fillStyle = '#fbbf24'; ctx.fillRect(-barW * 0.5 + 1, barY + 1, Math.round((barW - 2) * prog), 4); ctx.font = 'bold 9px Inter, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fde68a'; ctx.fillText(`🏗️ Building ${Math.round(prog * 100)}%`, 0, barY - 3); ctx.restore(); } drawUnitOverlay(ctx, unit, dx, sy, invTilt, timeSec) { if (!unit || unit.isBoss) return; const f = (unit.vx || 0) < -0.05 ? -1 : unit.facing || 1, scale = unit.childScale || 1.0; ctx.save(); ctx.translate(dx, sy); ctx.scale(1, invTilt); if (unit.isPregnant && unit.gender === 'female') { ctx.fillStyle = 'rgba(244, 114, 182, 0.3)'; ctx.strokeStyle = '#f472b6'; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.arc(3.5 * f * scale, -14 * scale, 4.8 * scale, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); } if (unit.profession === 'fisherman' && Math.abs(unit.y - RIVER_Y) < 95) { const bobY = RIVER_Y - unit.y + Math.sin(timeSec * 5 + (unit.id || 0)) * 2.5; ctx.strokeStyle = '#78350f'; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(6 * f, -16); ctx.lineTo(22 * f, -28); ctx.stroke(); ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(22 * f, -28); ctx.lineTo(28 * f, bobY); ctx.stroke(); ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(28 * f, bobY, 2.5, 0, Math.PI * 2); ctx.fill(); } if (unit.weaponType && scale >= 0.85) { ctx.strokeStyle = unit.weaponType === 'spear' ? '#e2e8f0' : '#fbbf24'; ctx.lineWidth = 2.0; ctx.beginPath(); ctx.moveTo(4 * f, -12); ctx.lineTo(18 * f, -22); ctx.stroke(); } ctx.restore(); } stepWorldOrderAndLifecycle(game, dt) { if (!game) return; /* 1. Initialize Rare Bending (~8%), Professions, Weapons, Genders & Scarce Money */ if (Array.isArray(game.villagers)) { let benderCount = 0; const maxBenders = 2; for (let i = 0; i < game.villagers.length; i++) { const v = game.villagers[i]; if (!v) continue; if (!v._societyInitialized) { v._societyInitialized = true; v.gender = i % 2 === 0 ? 'male' : 'female'; v.walletGold = Math.min(v.walletGold || 4, 2 + (i % 6) * 2); if (v.isT101s) { v.profession = 'sovereign'; v.professionLabel = '👑 Sovereign'; v.weaponType = 'sword'; } else if (benderCount < maxBenders && (i === 1 || i === 4)) { benderCount++; v.bender = i === 1 ? 'fire' : 'air'; v.subElement = i === 1 ? 'lightning' : 'flight'; v.talent = 'bending_savant'; v.profession = 'bender'; v.professionLabel = `✨ Rare ${v.bender.toUpperCase()} Bender`; } else { v.bender = null; v.subElement = null; v.skySoar = false; const p = PROFESSIONS[i % PROFESSIONS.length]; v.profession = p.id; v.professionLabel = p.label; if (p.id === 'soldier' || p.id === 'hunter' || i % 3 === 0) { v.talent = 'martial_prodigy'; const w = WEAPON_ARSENAL[i % WEAPON_ARSENAL.length]; v.weaponType = p.id === 'hunter' ? 'bow' : w.id; v.weaponLabel = p.id === 'hunter' ? '🏹 Bow' : w.label; } } } else if (v.bender && !v.isT101s) { benderCount++; if (benderCount > maxBenders) { v.bender = null; v.subElement = null; } } if ((v.walletGold || 0) > 38 && !v.isT101s) v.walletGold = 14 + (v.id % 9); } if (!game._initialFamilySeeded && game.villagers.length >= 6) { game._initialFamilySeeded = true; const w = game.villagers.find((u) => u && !u.isT101s && u.gender === 'female' && (u.age || 20) >= 18); const m = game.villagers.find((u) => u && !u.isT101s && u.gender === 'male' && (u.age || 20) >= 18); if (w && m) { w.isPregnant = true; w.pregnancyProgress = 0.58; m._consequenceTag = `💕 Expecting Child with ${w.name.split('-')[0]}`; m._consequenceTimer = 7.0; } } } /* 2. Step Professions, Pregnancy, Love-Making (Success vs Failure), Scarce Trade & Construction */ if (Array.isArray(game.villagers) && Array.isArray(game.buildings)) { const unfinishedB = game.buildings.find((b) => b && b.owner === 'player' && (b.constructionProgress ?? 1) < 1.0); const marketB = game.buildings.find((b) => b && b.owner === 'player' && b.type === 'market'); for (const u of game.villagers) { if (!u) continue; if ((u._consequenceTimer || 0) > 0) u._consequenceTimer = Math.max(0, u._consequenceTimer - dt); if ((u._loveCooldown || 0) > 0) u._loveCooldown = Math.max(0, u._loveCooldown - dt); if ((u._tradeCooldown || 0) > 0) u._tradeCooldown = Math.max(0, u._tradeCooldown - dt); if ((u.age ?? 20) < 18) { u._roleBadge = `👶 Child (${Math.floor(u.age || 5)}y)`; continue; } if (u.isPregnant && u.gender === 'female') { u.pregnancyProgress = (u.pregnancyProgress || 0) + dt * 0.032; u._roleBadge = `🤰 Pregnant (${Math.min(99, Math.floor(u.pregnancyProgress * 100))}%) • ${u.professionLabel || 'Citizen'}`; if (u.pregnancyProgress >= 1.0) { u.isPregnant = false; u.pregnancyProgress = 0; u._loveCooldown = 35; if (game.villagers.length < 120 && typeof game.createVillager === 'function') { const baby = game.createVillager(u.x + 12, u.y + 8, `${u.name.split('-')[0]}Jr-${game.nextId}`); if (baby) { baby.age = 0.5; baby.childScale = 0.48; baby.gender = Math.random() < 0.5 ? 'male' : 'female'; baby.bender = Math.random() < 0.08 ? 'water' : null; baby._societyInitialized = true; game.villagers.push(baby); } } u._consequenceTag = '👶 Gave Birth to Newborn Child!'; u._consequenceTimer = 6.0; } continue; } if (u.gender === 'male' && (u._loveCooldown || 0) <= 0 && !u.isT101s) { const partner = game.villagers.find((w) => w && w !== u && w.gender === 'female' && (w.age ?? 20) >= 18 && !w.isPregnant && (w._loveCooldown || 0) <= 0 && Math.hypot(wrapDX(u.x, w.x), u.y - w.y) < 34); if (partner) { u._loveCooldown = 28; partner._loveCooldown = 28; if (Math.random() < 0.42) { partner.isPregnant = true; partner.pregnancyProgress = 0.04; u._consequenceTag = '💕 Made Love (Pregnant! 🤰)'; partner._consequenceTag = '💕 Conceived Child! 🤰'; } else { u._consequenceTag = '💔 Made Love (No Pregnancy)'; partner._consequenceTag = '💭 Made Love (Not Pregnant)'; } u._consequenceTimer = 4.5; partner._consequenceTimer = 4.5; } } if (u.profession === 'builder' && unfinishedB) { const dxB = wrapDX(u.x, unfinishedB.x), dyB = unfinishedB.y - u.y; if (Math.hypot(dxB, dyB) > (unfinishedB.radius || 32) + 18) { u.x = wrapX(u.x + Math.sign(dxB) * 38 * dt, WORLD_W); u.y += Math.sign(dyB) * 26 * dt; u.state = 'move'; } else { u.state = 'build'; unfinishedB.constructionProgress = Math.min(1.0, (unfinishedB.constructionProgress || 0) + dt * 0.045); } u._roleBadge = `🔨 Builder (${Math.round((unfinishedB.constructionProgress || 0) * 100)}%)`; } else if (u.profession === 'fisherman') { if (Math.abs(u.y - (RIVER_Y + 34)) > 18) u.y += Math.sign(RIVER_Y + 34 - u.y) * 28 * dt; u._roleBadge = `🎣 Fisherman • ${u.walletGold || 0}🪙`; } else if (u.profession === 'trader' && marketB) { if ((u._tradeCooldown || 0) <= 0 && Math.hypot(wrapDX(u.x, marketB.x), u.y - marketB.y) < 95) { u._tradeCooldown = 14; u.walletGold = (u.walletGold || 0) + 2; u._consequenceTag = '🤝 Market Trade (+2🪙 Scarce Gold)'; u._consequenceTimer = 3.2; } u._roleBadge = `⚖️ Trader • ${u.walletGold || 0}🪙`; } else if (u.talent === 'martial_prodigy' && u.weaponLabel) { u._roleBadge = `${u.professionLabel || '🛡️ Soldier'} • ${u.weaponLabel}`; } else { u._roleBadge = `${u.professionLabel || '⛏️ Gatherer'} • ${u.walletGold || 0}🪙`; } } for (const b of game.buildings) { if (b && (b.constructionProgress ?? 1) < 1.0) b.constructionProgress = Math.min(1.0, b.constructionProgress + dt * 0.018); } } /* 3. Rival Homelands, Rare Enemy Bending (~8%), Weapons & Childhood Lifecycle */ if (Array.isArray(game.aiPlayers) && Array.isArray(game.buildings) && Array.isArray(game.enemies)) { if (!game._rivalHomelandsSeeded) { game._rivalHomelandsSeeded = true; for (const ai of game.aiPlayers) { if (!ai) continue; ai.y = 2320; if (!game.buildings.some((b) => b && b.owner === ai.id && b.type === 'hut')) { game.buildings.push( { id: game.nextId++, type: 'hut', name: `${ai.tribe} Nursery`, icon: '🛖', x: wrapX(ai.x - 135, WORLD_W), y: 2320, hp: 650, maxHp: 650, radius: 28, owner: ai.id, customColor: ai.color, constructionProgress: 1.0, _gridAligned: true }, { id: game.nextId++, type: 'barracks', name: `${ai.tribe} Barracks`, icon: '⚔️', x: wrapX(ai.x + 135, WORLD_W), y: 2320, hp: 980, maxHp: 980, radius: 36, owner: ai.id, customColor: ai.color, constructionProgress: 0.45, _gridAligned: true } ); } } } if (!game._vanguardRelocatedToHomeland && game.aiPlayers.length > 0) { game._vanguardRelocatedToHomeland = true; for (let i = 0; i < game.enemies.length; i++) { const e = game.enemies[i]; if (!e || e.isBoss) continue; const ai = game.aiPlayers.find((a) => a.id === e.aiOwnerId) || game.aiPlayers[i % game.aiPlayers.length]; if (ai && Math.abs(wrapDX(780, e.x)) < 700) { e.x = wrapX(ai.x + ((i % 4) - 1.5) * 42, WORLD_W); e.y = 2320 + ((i % 3) - 1) * 34; e.age = i % 2 === 0 ? 6 : 14; e.childScale = 0.5 + 0.5 * (e.age / 18); } } } for (let i = 0; i < game.enemies.length; i++) { const e = game.enemies[i]; if (!e || e.isBoss) continue; if (!e._lifecycleInitialized) { e._lifecycleInitialized = true; e.gender = i % 2 === 0 ? 'male' : 'female'; if ((e.id || i) % 11 !== 0) e.bender = null; const w = WEAPON_ARSENAL[(e.id || i) % WEAPON_ARSENAL.length]; e.weaponType = w.id; e.weaponLabel = w.label; if (!e.ringCrusader && e.age >= 18 && i > 12) e.age = 4 + (i % 7); } e.age = (e.age ?? 8) + dt * 0.12; if (e.age < 18) { e.childScale = Math.max(0.48, Math.min(0.95, 0.48 + 0.52 * (e.age / 18))); e.lifeStage = e.age < 12 ? 'child' : 'youth'; const homeAI = game.aiPlayers.find((a) => a.id === e.aiOwnerId); if (homeAI && Math.hypot(wrapDX(e.x, homeAI.x), 2320 - e.y) > 150) { e.x = wrapX(e.x + Math.sign(wrapDX(e.x, homeAI.x)) * 32 * dt, WORLD_W); e.y += Math.sign(2320 - e.y) * 20 * dt; } e._motiveBadge = e.age < 12 ? `👶 Clan Child (${Math.floor(e.age)}y)` : `🧒 Training Youth (${Math.floor(e.age)}y • ${e.weaponLabel})`; } else { e.childScale = 1.0; e.lifeStage = 'adult'; if (!e.warMotive) { const spec = WAR_MOTIVES[(e.id || 0) % WAR_MOTIVES.length]; e.warMotive = spec.reason; e.motiveTargetTypes = spec.targetTypes; } e._motiveBadge = `${e.warMotive} (${e.bender ? '✨ ' + e.bender.toUpperCase() : e.weaponLabel})`; } } } } }
 
 export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
   const proto =
@@ -4703,13 +4491,13 @@ return result;
       this.time || 0,
       this.showFloatingBadges !== false
     );
-    if (this.showFloatingBadges !== false && ((unit._consequenceTimer || 0) > 0 || (isEnemy && unit._motiveBadge))) {
+    worldOrder.drawUnitOverlay(ctx, unit, dx, sy, invTilt, this.time || 0); if (this.showFloatingBadges !== false && (((unit._consequenceTimer || 0) > 0 && unit._consequenceTag) || (isEnemy ? unit._motiveBadge : unit._roleBadge))) {
 ctx.save();
 ctx.translate(dx, sy);
 ctx.scale(1, invTilt);
 ctx.font = 'bold 9.5px Inter, sans-serif';
 ctx.textAlign = 'center';
-const label = (unit._consequenceTimer || 0) > 0 ? unit._consequenceTag : unit._motiveBadge;
+const label = ((unit._consequenceTimer || 0) > 0 && unit._consequenceTag) ? unit._consequenceTag : (isEnemy ? unit._motiveBadge : unit._roleBadge);
 ctx.fillStyle = (unit._consequenceTimer || 0) > 0 ? (label.includes('Remorse') ? '#fda4af' : '#93c5fd') : '#fde047';
 ctx.fillText(label, 0, -52);
 ctx.restore();
@@ -4775,7 +4563,7 @@ ctx.restore();
       this.time || 0,
       Boolean(this.showFloatingBadges)
     );
-  };
+  worldOrder.drawConstructionScaffolding(ctx, building, dx + shakeX, sy, invTilt, this.time || 0); };
 
   proto.drawResourceNode = function (ctx, node, dx, sy, invTilt) {
     envBank.drawGameResourceNode(ctx, node, dx, sy, invTilt, this.time || 0);
