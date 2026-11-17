@@ -2074,13 +2074,11 @@ export class VillagerSpriteBank {
       ctx.globalAlpha = 0.68 + Math.sin(gameTime * 12 + (unit.id || 0)) * 0.15;
     }
 
-    if (hoverOffset < -2) {
-      const shadowShrink = Math.max(0.35, 1 - Math.abs(hoverOffset) / 95);
-      ctx.fillStyle = `rgba(10, 14, 18, ${(0.28 * shadowShrink).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.ellipse(0, 2, 12 * baseScale * shadowShrink, 5 * baseScale * shadowShrink, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    const shadowShrink = Math.max(0.32, 1 - Math.abs(Math.min(0, hoverOffset)) / 95);
+    ctx.fillStyle = `rgba(10, 14, 18, ${(0.26 * shadowShrink).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.ellipse(0, 2, 11.5 * baseScale * shadowShrink, 4.8 * baseScale * shadowShrink, 0, 0, Math.PI * 2);
+    ctx.fill();
 
     ctx.translate(0, hoverOffset);
 
@@ -2382,7 +2380,10 @@ export class SovereignPhysicsEngine {
   }
 
   stepWorldPhysics(game, dt, footpaths) {
-    const clampedDt = Math.min(0.05, Math.max(0.001, dt));
+    const totalDt = Math.min(0.05, Math.max(0.001, dt));
+    const clampedDt = totalDt;
+    const subSteps = 2;
+    const subDt = totalDt / subSteps;
 
     if (Array.isArray(game.worldBosses)) {
       for (const b of game.worldBosses) {
@@ -2516,38 +2517,60 @@ export class SovereignPhysicsEngine {
       if (typeof u.z !== 'number') u.z = 0;
       if (typeof u.vz !== 'number') u.vz = 0;
 
-      if (u.z > 0 || u.vz !== 0) {
-        u.vz -= this.gravity * clampedDt;
-        u.z += u.vz * clampedDt;
+      const gAccel = Math.max(520, this.gravity || 520);
+        const muSurface = u._inRiverWater ? 0.55 : (footpaths && footpaths.getWearAt(u.x, u.y) >= 0.45) ? 0.48 : 0.35;
+        for (let st = 0; st < subSteps; st++) {
+          if ((u.z || 0) <= 0.5) {
+            const surfDecay = Math.exp(-muSurface * 8 * subDt);
+            if (typeof u.kx === 'number') u.kx *= surfDecay;
+            if (typeof u.ky === 'number') u.ky *= surfDecay;
+          }
+          if (u.z > 0 || u.vz !== 0) {
+            u.vz -= gAccel * subDt;
+            u.vz *= Math.exp(-0.22 * subDt);
+            u.z += u.vz * subDt;
 
-        if (u.z <= 0) {
-          u.z = 0;
-          if (u.vz < -95) {
-            const impactSpeed = Math.abs(u.vz);
-            u.vz = impactSpeed * this.restitution;
-            this.spawnLandingDust(u.x, u.y, impactSpeed / 220);
-            if (impactSpeed > 155) {
-              const fallDmg = Math.max(8, Math.round((impactSpeed - 140) * 0.14));
-              u.hp = Math.max(0, (u.hp || 100) - fallDmg);
-              u._knockdownTimer = Math.max(u._knockdownTimer || 0, 1.35);
-              u._consequenceTag = '⛰️ Hard Fall Impact (-' + fallDmg + ' HP)!';
+            if (u.z <= 0) {
+              u.z = 0;
+              if (u.vz < -95) {
+                const impactSpeed = Math.abs(u.vz);
+                u.vz = impactSpeed * this.restitution;
+                this.spawnLandingDust(u.x, u.y, impactSpeed / 220);
+                if (impactSpeed > 155) {
+                  const fallDmg = Math.max(8, Math.round((impactSpeed - 140) * 0.14));
+                  u.hp = Math.max(0, (u.hp || 100) - fallDmg);
+                  u._knockdownTimer = Math.max(u._knockdownTimer || 0, 1.35);
+                  u._consequenceTag = '⛰️ Hard Fall Impact (-' + fallDmg + ' HP)!';
+                }
+              } else {
+                u.vz = 0;
+              }
             }
-          } else {
-            u.vz = 0;
           }
         }
-      }
 
       const inRiverBand = Math.abs(u.y - RIVER_Y) < 42;
-      let onBridge = false;
-      if (inRiverBand && Array.isArray(game.stoneBridges)) {
-        for (const br of game.stoneBridges) {
-          if (Math.abs(wrapDX(u.x, br.x)) < 46) {
-            onBridge = true;
-            break;
+        let onBridge = false;
+        let nearestBr = null;
+        let nearestBrDist = Infinity;
+        if (inRiverBand && Array.isArray(game.stoneBridges)) {
+          for (const br of game.stoneBridges) {
+            const dxBr = Math.abs(wrapDX(u.x, br.x));
+            if (dxBr < nearestBrDist) {
+              nearestBrDist = dxBr;
+              nearestBr = br;
+            }
+            if (dxBr < 46) {
+              onBridge = true;
+              break;
+            }
+          }
+          if (!onBridge && nearestBr && nearestBrDist < 110) {
+            const toBrX = wrapDX(u.x, nearestBr.x);
+            const funnelPull = (1 - nearestBrDist / 110) * 65 * clampedDt;
+            u.x += (toBrX >= 0 ? 1 : -1) * Math.min(Math.abs(toBrX), funnelPull);
           }
         }
-      }
 
       u._inRiverWater = (inRiverBand && !onBridge && !u.skySoar && u.z < 4) || Boolean(u.inWater);
       if (u._inRiverWater) {
@@ -2612,8 +2635,15 @@ export class SovereignPhysicsEngine {
 
           const vn = (u.vx || 0) * nx + (u.vy || 0) * ny;
           if (vn < 0) {
-            u.vx -= vn * nx * 0.85;
-            u.vy -= vn * ny * 0.85;
+            u.vx -= vn * nx * 1.02;
+            u.vy -= vn * ny * 1.02;
+            const tangX = -ny;
+            const tangY = nx;
+            const vt = (u.vx || 0) * tangX + (u.vy || 0) * tangY;
+            const slideSign = vt >= 0 ? 1 : -1;
+            const slidePush = Math.abs(vn) * 0.35 * slideSign;
+            u.vx += tangX * slidePush;
+            u.vy += tangY * slidePush;
           }
         }
       } else {
