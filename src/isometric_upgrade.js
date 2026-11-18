@@ -4696,7 +4696,7 @@ ctx.restore();
     const shakeAmp = Math.min(1, (building._hitShake || 0) * 2.2);
     const shakeX = shakeAmp > 0.01 ? Math.sin((this.time || 0) * 60) * 4.0 * shakeAmp : 0;
     const shakeY = shakeAmp > 0.01 ? Math.cos((this.time || 0) * 50) * 1.8 * shakeAmp : 0;
-    const leanAngle = building._leanAngle || 0; if (leanAngle) { ctx.save(); ctx.translate(dx + shakeX, sy); ctx.rotate(leanAngle); ctx.translate(-(dx + shakeX), -sy); } const shakeY = 0; const timeSec = this.time || 0; const prog = typeof building.constructionProgress === 'number' ? building.constructionProgress : 1.0; if (worldOrder.syxCutawayRooms && prog >= 0.995) { worldOrder.drawSongsOfSyxCutawayInterior(ctx, building, dx + shakeX, sy + shakeY, invTilt, timeSec); } else envBank.drawGameBuilding(
+    const leanAngle = building._leanAngle || 0; if (leanAngle) { ctx.save(); ctx.translate(dx + shakeX, sy); ctx.rotate(leanAngle); ctx.translate(-(dx + shakeX), -sy); }  const timeSec = this.time || 0; const prog = typeof building.constructionProgress === 'number' ? building.constructionProgress : 1.0; if (worldOrder.syxCutawayRooms && prog >= 0.995) { worldOrder.drawSongsOfSyxCutawayInterior(ctx, building, dx + shakeX, sy + shakeY, invTilt, timeSec); } else envBank.drawGameBuilding(
       ctx,
       building,
       dx + shakeX,
